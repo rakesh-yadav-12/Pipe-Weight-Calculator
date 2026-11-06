@@ -18,6 +18,7 @@ app = Flask(__name__)
 K = 0.0246615   # weight constant (mild steel)
 EQ = 0.6363     # converts (SideA + SideB) of a hollow section into an equivalent OD
 DEFAULT_LENGTH_M = 6.0   # standard pipe length used for "Weight / Pipe"
+METRES_PER_FOOT_DIV = 3.281   # Rate/MTR % 3.281  =>  Rate/Foot
 
 
 def to_float(v):
@@ -29,15 +30,17 @@ def to_float(v):
         return 0.0
 
 
-def calc_weight(mode, od, a, b, t, length=DEFAULT_LENGTH_M):
+def calc_weight(mode, od, a, b, t, length=DEFAULT_LENGTH_M, rate=0.0, view="rate"):
     """
     mode: 'round' or 'hollow'
-    od, a, b, t, length: numbers in mm (length in metres)
-    Returns a dict with ok / message / the equivalent OD (hollow only) / kg-per-metre / weight-per-pipe
+    view: 'weight' -> returns Kg/MTR + Weight/Pipe (no rate needed)
+          'rate'   -> returns Rate/MTR + Rate/Foot only (weights stay on the server)
+    od, a, b, t, length: numbers in mm (length in metres); rate: price per kg
     """
     ok = False
     msg = ""
     eq_od = 0.0
+    hint_word = "weight" if view == "weight" else "rate"
 
     if mode == "round":
         eq_od = od
@@ -48,7 +51,7 @@ def calc_weight(mode, od, a, b, t, length=DEFAULT_LENGTH_M):
             else:
                 ok = True
         else:
-            msg = "Enter both OD and thickness" if started else "Enter OD and thickness - the weight appears instantly"
+            msg = "Enter both OD and thickness" if started else f"Enter OD and thickness - the {hint_word} appears instantly"
     else:  # hollow section
         eq_od = (a + b) * EQ
         started = bool(a or b or t)
@@ -58,18 +61,35 @@ def calc_weight(mode, od, a, b, t, length=DEFAULT_LENGTH_M):
             else:
                 ok = True
         else:
-            msg = "Enter both sides and thickness" if started else "Enter both sides and thickness - the weight appears instantly"
+            msg = "Enter both sides and thickness" if started else f"Enter both sides and thickness - the {hint_word} appears instantly"
 
     kg_per_m = (eq_od - t) * t * K if ok else 0.0
-    weight_per_pipe = kg_per_m * length
 
+    if view == "weight":
+        return {
+            "ok": ok,
+            "message": msg,
+            "view": "weight",
+            "equivalent_od": round(eq_od, 2) if mode == "hollow" else None,
+            "kg_per_metre": round(kg_per_m, 3),
+            "weight_per_pipe": round(kg_per_m * length, 2),
+            "length_m": length,
+        }
+
+    # Rate section:  Kg/MTR x Rate/Kg => Rate/MTR ;  Rate/MTR % 3.281 => Rate/Foot
+    if ok and not rate:
+        msg = "Enter rate per kg"
+    rate_ok = bool(ok and rate)
+    rate_per_m = kg_per_m * rate if rate_ok else 0.0
+    rate_per_foot = rate_per_m / METRES_PER_FOOT_DIV if rate_ok else 0.0
     return {
         "ok": ok,
         "message": msg,
-        "equivalent_od": round(eq_od, 2) if mode == "hollow" else None,
-        "kg_per_metre": round(kg_per_m, 3),
-        "weight_per_pipe": round(weight_per_pipe, 2),
-        "length_m": length,
+        "view": "rate",
+        "rate_ok": rate_ok,
+        "rate_per_kg": rate,
+        "rate_per_metre": round(rate_per_m, 2),
+        "rate_per_foot": round(rate_per_foot, 2),
     }
 
 
@@ -87,8 +107,10 @@ def api_calculate():
     b = to_float(data.get("b"))
     t = to_float(data.get("t"))
     length = to_float(data.get("length")) or DEFAULT_LENGTH_M
+    rate = to_float(data.get("rate"))
+    view = "weight" if data.get("view") == "weight" else "rate"
 
-    result = calc_weight(mode, od, a, b, t, length)
+    result = calc_weight(mode, od, a, b, t, length, rate, view)
     return jsonify(result)
 
 

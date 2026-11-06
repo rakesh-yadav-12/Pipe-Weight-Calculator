@@ -1,9 +1,0 @@
-{
-  "name": "Pipe Weight Calculator",
-  "short_name": "Pipe Weight",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#14151f",
-  "theme_color": "#14151f",
-  "orientation": "portrait-primary"
-}

@@ -1,68 +1,92 @@
 /* This file only reads the inputs and talks to the server.
    Every calculation happens in Python (see app.py -> calc_weight). */
 
-const V = { od: '', a: '', b: '', t: '' };
-let mode = 'round';
-let reqSeq = 0; // ignore stale/slow responses if the user types fast
-
 const g = id => document.getElementById(id);
-const ID = { od: 'wc-od', a: 'wc-a', b: 'wc-b', t: 'wc-t' };
+const ID = { od: 'wc-od', a: 'wc-a', b: 'wc-b', t: 'wc-t', rate: 'wc-rate' };
 const fmt = (n, d) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
-const pop = id => { const c = g(id); c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); };
+const state = { mode: 'round', view: 'rate' };
+const LABELS = { mode: { round: 'Round Pipe', hollow: 'Hollow Section' }, view: { rate: 'Rate (\u20B9)', weight: 'Weight (kg)' } };
+const radio = name => (name === 'wc-mode' ? state.mode : state.view);
+function toggle(kind) {
+  const opts = kind === 'mode' ? ['round', 'hollow'] : ['rate', 'weight'];
+  state[kind] = state[kind] === opts[0] ? opts[1] : opts[0];
+  g('wc-tg-' + kind).querySelector('span').textContent = LABELS[kind][state[kind]];
+  applyLayout();
+}
+let reqSeq = 0;
 
-let last = '';
+function val(k) { return g(ID[k]).value; }
 
-async function recalc() {
+function clearOut() { g('wc-out').className = 'wc-out'; g('wc-out').replaceChildren(); }
+
+function showMsg(text, warn) {
+  const o = g('wc-out');
+  o.className = 'wc-out ' + (warn ? 'warn' : 'hint');
+  o.replaceChildren(Object.assign(document.createElement('p'), { textContent: text }));
+}
+
+function row(label, value) {
+  const p = document.createElement('p');
+  p.className = 'wc-row';
+  const s = document.createElement('span'); s.textContent = label + ': ';
+  const b = document.createElement('b'); b.textContent = value;
+  p.append(s, b);
+  return p;
+}
+
+function describe(mode, view) {
+  const t = val('t'), rate = val('rate');
+  const size = mode === 'round'
+    ? val('od') + ' mm OD x ' + t + ' mm thick round pipe'
+    : val('a') + ' x ' + val('b') + ' mm, ' + t + ' mm thick hollow section';
+  return (view === 'rate' ? 'Rate for ' : 'Weight for ') + size + (view === 'rate' ? ' at \u20B9' + rate + '/kg' : '') + ':';
+}
+
+async function calculate() {
+  const mode = radio('wc-mode'), view = radio('wc-view');
   const mySeq = ++reqSeq;
-  const payload = { mode, od: V.od, a: V.a, b: V.b, t: V.t };
-
   let r;
   try {
     const res = await fetch('/api/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ mode, view, od: val('od'), a: val('a'), b: val('b'), t: val('t'), rate: val('rate') })
     });
     r = await res.json();
   } catch (e) {
-    g('wc-er').className = 'wc-er';
-    g('wc-er').textContent = 'Could not reach the server - is app.py still running?';
+    showMsg('Could not reach the server - please try again.', true);
     return;
   }
-  if (mySeq !== reqSeq) return; // a newer request already came back
+  if (mySeq !== reqSeq) return;
 
-  g('wc-v1').textContent = r.ok ? fmt(r.kg_per_metre, 3) : '–';
-  g('wc-v2').textContent = r.ok ? fmt(r.weight_per_pipe, 2) : '–';
-  g('wc-eq').textContent = mode === 'hollow' && r.equivalent_od ? fmt(r.equivalent_od, 2) + ' mm' : '-';
-
-  const sig = r.ok ? String(r.kg_per_metre) : '';
-  if (sig && sig !== last) { pop('wc-k1'); pop('wc-k2'); }
-  last = sig;
-
-  const fx = g('wc-fx');
-  const t = Number(V.t) || 0, a = Number(V.a) || 0, b = Number(V.b) || 0;
-  if (r.ok) {
-    fx.innerHTML = (mode === 'round' ? '' : '<b>OD</b> = (' + a + ' + ' + b + ') &times; 0.6363 = <b>' + fmt(r.equivalent_od, 2) + '</b><br>') +
-      '<b>Kg/MTR</b> = (' + (mode === 'round' ? Number(V.od) || 0 : fmt(r.equivalent_od, 2)) + ' &minus; ' + t + ') &times; ' + t + ' &times; 0.0246615 = <b>' + fmt(r.kg_per_metre, 3) + '</b><br>' +
-      '<b>Weight/Pipe</b> = ' + fmt(r.kg_per_metre, 3) + ' &times; ' + fmt(r.length_m, 2) + ' = <b>' + fmt(r.weight_per_pipe, 2) + ' kg</b>';
+  if (view === 'rate') {
+    if (!r.rate_ok) { showMsg(r.message || 'Enter rate per kg', !/^Enter/.test(r.message || 'Enter')); return; }
+    const o = g('wc-out'); o.className = 'wc-out ok';
+    o.replaceChildren(
+      Object.assign(document.createElement('p'), { textContent: describe(mode, view) }),
+      row('Rate / MTR', '\u20B9 ' + fmt(r.rate_per_metre, 2)),
+      row('Rate / Foot', '\u20B9 ' + fmt(r.rate_per_foot, 2))
+    );
   } else {
-    fx.innerHTML = mode === 'round'
-      ? '<b>Round Pipe:</b> (OD &minus; thk) &times; thk &times; 0.0246615 = Kg/MTR<br>Weight/Pipe = Kg/MTR &times; 6.00'
-      : '<b>Hollow Section:</b> (mm + mm) &times; 0.6363 &rArr; OD<br>[{(mm + mm) &times; 0.6363} &minus; thk] &times; thk &times; 0.0246615 = Kg/MTR<br>Weight/Pipe = Kg/MTR &times; 6.00';
+    if (!r.ok) { showMsg(r.message, !/^Enter/.test(r.message)); return; }
+    const o = g('wc-out'); o.className = 'wc-out ok';
+    const lines = [Object.assign(document.createElement('p'), { textContent: describe(mode, view) })];
+    if (mode === 'hollow' && r.equivalent_od) lines.push(row('Equivalent OD', fmt(r.equivalent_od, 2) + ' mm'));
+    lines.push(row('Kg / MTR', fmt(r.kg_per_metre, 3) + ' kg'));
+    lines.push(row('Weight / Pipe (' + fmt(r.length_m, 2) + ' m)', fmt(r.weight_per_pipe, 2) + ' kg'));
+    o.replaceChildren(...lines);
   }
-
-  const er = g('wc-er');
-  er.className = 'wc-er';
-  er.textContent = (!r.ok && r.message) ? r.message : '';
 }
 
-function setMode(m) {
-  mode = m;
-  document.querySelectorAll('.wc-tabs button').forEach(x => x.classList.toggle('on', x.dataset.m === m));
-  document.querySelectorAll('.wc-r').forEach(x => x.classList.toggle('wc-hide', m !== 'round'));
-  document.querySelectorAll('.wc-h').forEach(x => x.classList.toggle('wc-hide', m === 'round'));
-  recalc();
-  setTimeout(() => { try { g(m === 'round' ? 'wc-od' : 'wc-a').focus({ preventScroll: true }); } catch (e) {} }, 60);
+let liveTimer = 0;
+function liveCalc() { clearTimeout(liveTimer); liveTimer = setTimeout(calculate, 120); }
+
+function applyLayout() {
+  const mode = radio('wc-mode'), view = radio('wc-view');
+  document.querySelectorAll('.wc-r').forEach(x => x.classList.toggle('wc-hide', mode !== 'round'));
+  document.querySelectorAll('.wc-h').forEach(x => x.classList.toggle('wc-hide', mode === 'round'));
+  document.querySelectorAll('.vr').forEach(x => x.classList.toggle('wc-hide', view !== 'rate'));
+  calculate();
 }
 
 Object.keys(ID).forEach(k => {
@@ -70,18 +94,17 @@ Object.keys(ID).forEach(k => {
   i.addEventListener('input', () => {
     const v = i.value.replace(/,/g, '.').replace(/[^0-9.]/g, '').replace(/^(\d*\.\d*)\./, '$1');
     if (v !== i.value) i.value = v;
-    V[k] = v;
-    recalc();
+    liveCalc();
   });
+  i.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); calculate(); } });
 });
 
-document.querySelectorAll('.wc-tabs button').forEach(b => b.onclick = () => setMode(b.dataset.m));
-
+g('wc-tg-mode').onclick = () => toggle('mode');
+g('wc-tg-view').onclick = () => toggle('view');
 g('wc-clr').onclick = () => {
-  V.od = V.a = V.b = V.t = '';
   Object.keys(ID).forEach(k => g(ID[k]).value = '');
-  recalc();
-  try { g(mode === 'round' ? 'wc-od' : 'wc-a').focus({ preventScroll: true }); } catch (e) {}
+  calculate();
+  try { g(radio('wc-mode') === 'round' ? 'wc-od' : 'wc-a').focus({ preventScroll: true }); } catch (e) {}
 };
 
-setMode(mode);
+applyLayout();

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14151f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pipe Weight">
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<title>Pipe Weight Calculator</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app" role="application">
+
+  <header class="app-hd">
+    <i class="wc-hi">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><rect x="7" y="5.5" width="10" height="4" rx="1"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01"/></svg>
+    </i>
+    <div class="wc-ht"><b>Pipe Weight Calculator</b><small>Official tool by Shreeji SteelTubes Pvt. Ltd.</small></div>
+    <span class="app-badge">Live</span>
+  </header>
+
+  <main class="app-bd" role="dialog" aria-label="Pipe weight calculator">
+    <div class="wc-tabs wc-rows">
+      <button type="button" class="on" data-m="round">Round Pipe</button>
+      <button type="button" data-m="hollow">Hollow Section</button>
+    </div>
+    <div class="wc-fg">
+      <label class="wc-f wc-r full"><span>Outer Diameter (OD) &ndash; MM</span><input id="wc-od" inputmode="decimal" autocomplete="off" placeholder="e.g. 60"></label>
+      <label class="wc-f wc-h wc-hide"><span>Side A &ndash; MM</span><input id="wc-a" inputmode="decimal" autocomplete="off" placeholder="e.g. 40"></label>
+      <label class="wc-f wc-h wc-hide"><span>Side B &ndash; MM</span><input id="wc-b" inputmode="decimal" autocomplete="off" placeholder="e.g. 20"></label>
+      <label class="wc-f full"><span>Thickness (THK) &ndash; MM</span><input id="wc-t" inputmode="decimal" autocomplete="off" placeholder="e.g. 3.2"></label>
+    </div>
+    <div class="wc-res">
+      <div class="wc-eo wc-h wc-hide"><span>OD = (A + B) &times; 0.6363</span><b id="wc-eq">-</b></div>
+      <div class="wc-c" id="wc-k1"><small>KG / MTR</small><b id="wc-v1">&ndash;</b><em>kg per metre</em></div>
+      <div class="wc-c pp" id="wc-k2"><small>WEIGHT / PIPE</small><b id="wc-v2">&ndash;</b><em>kg &times; {{ "%.2f"|format(default_length) }} m</em></div>
+    </div>
+    <div class="wc-fx" id="wc-fx"></div>
+    <div class="wc-er" id="wc-er"></div>
+    <div class="wc-ac">
+      <button type="button" class="wc-clr" id="wc-clr" title="Clear all fields and start again">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        Clear / Reset
+      </button>
+    </div>
+  </main>
+
+  <footer class="app-ft">All calculations run on the server (Python / Flask) &middot; pipe length: {{ "%.2f"|format(default_length) }} m</footer>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
